@@ -326,3 +326,27 @@ def test_zero_feature():
         assert result.exit_code == 0
         gbk = SeqIO.read(tmpdir / plasmid.with_suffix(".gbk"), "genbank")
     assert len(gbk.features) == 2
+
+
+@pytest.mark.parametrize("ext", ["fasta", "fa", "fas", "fna"])
+def test_validate_file_all_fasta_extensions(ext):
+    input_file = f"tests/test_data/pAdDeltaF6.{ext}"
+    name, ext = resources.get_name_ext(input_file)
+    sequence = resources.validate_file(input_file, ext)
+    assert len(sequence) == 15420
+
+
+def test_validate_file_bad_extension():
+    input_file = f"tests/test_data/pAdDeltaF6.txt"
+    name, ext = resources.get_name_ext(input_file)
+    with pytest.raises(ValueError, match = "must be a FASTA or GenBank file"):
+        _ = resources.validate_file(input_file, ext)
+
+
+def test_annotate_fna(tmp_path):
+    input_file = f"tests/test_data/pAdDeltaF6.fna"
+    arglist = ["-i", input_file, "--output", tmp_path, "--html", "--csv", "-f", "pAdDeltaF6"]
+    result = CliRunner().invoke(main_batch, arglist)
+    assert result.exit_code == 0
+    gbk = SeqIO.read(tmp_path / "pAdDeltaF6_pLann.gbk", "genbank")
+    assert len(gbk.features) == 29

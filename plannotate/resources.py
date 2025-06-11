@@ -17,7 +17,7 @@ from plannotate import __version__ as plannotate_version
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 valid_genbank_exts = [".gbk", ".gb", ".gbf", ".gbff"]
-valid_fasta_exts = [".fa", ".fasta"]
+valid_fasta_exts = [".fa", ".fasta", ".fas", ".fna"]
 MAX_PLAS_SIZE = 50000
 
 DF_COLS = [
