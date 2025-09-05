@@ -32,7 +32,7 @@ cd pLannotate
 pip install -e .
 
 # Or install with uv (recommended)
-uv pip install -e .
+uv add plannotate-python
 ```
 
 ### 2. Install External Tools
@@ -94,6 +94,9 @@ rg --version
 python -c "from plannotate.annotate import annotate; print('✓ pLannotate-python installed successfully')"
 ```
 
+## Setting up the data
+This whole repo requires data.
+
 ## Quick Start
 
 ### Basic Usage
@@ -102,7 +105,7 @@ python -c "from plannotate.annotate import annotate; print('✓ pLannotate-pytho
 from plannotate.annotate import annotate
 
 # Annotate a plasmid sequence
-sequence = "ATGGTGAGCAAGGGCGAGGAGCTG..."  # Your plasmid sequence
+sequence = "ATGGTGAGCAAGGGCGAGGAGCTG"  # Your plasmid sequence
 result = annotate(sequence, linear=False)  # False for circular plasmids
 
 # View results
