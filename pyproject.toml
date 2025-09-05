@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pLannotate"
+version = "0.0.1"
+authors = [
+  { name="McClain Thiel", email="mcclain.thiel@gmail.com" },
+]
+description = "A package for plasmid annotation"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "biopython",
+    "pandas",
+    "reportlab",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "pytest-mock",
+]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --cov=plannotate"
+testpaths = [
+    "tests",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.15.0",
+]

@@ -299,68 +299,17 @@ def get_clean_csv_df(recordDf):
 
 
 def get_yaml(yaml_file_loc):
-    # file_name = get_resource("data", "databases.yml")
     with open(yaml_file_loc, "r") as f:
         dbs = yaml.load(f, Loader=yaml.SafeLoader)
 
-    # collapes list
     for db in dbs.keys():
-        blast_database_loc = dbs[db]["location"]
-        if blast_database_loc == "Default":
-            blast_database_loc = str(files(__package__) / "data/BLAST_dbs")
         try:
-            parameters = " ".join(dbs[db]["parameters"])
+            dbs[db]["parameters"] = " ".join(dbs[db]["parameters"])
         except KeyError:
-            parameters = ""
-        dbs[db]["parameters"] = parameters
+            dbs[db]["parameters"] = ""
+        dbs[db]["db_loc"] = dbs[db]["location"]
 
-        if dbs[db]["method"] == "infernal":
-            db_loc = " ".join(
-                os.path.join(blast_database_loc, x)
-                for x in (f"{db}.clanin", f"{db}.cm")
-            )
-        else:
-            db_loc = os.path.join(blast_database_loc, db)
-        # dbs[db]['name'] = db
-        dbs[db]["db_loc"] = db_loc
-        # db_list.append(dbs[db])
     return dbs
 
 
-def databases_exist():
-    return os.path.exists(f"{ROOT_DIR}/data/BLAST_dbs/")
 
-
-def download_databases():
-    # dynamic version number for the databases
-    # this is locked at minor version bumps
-    # need to upload a new database into github every minor update
-    # patch number bumps just refer to the X.X.0 version
-    db_loc = f"https://github.com/mmcguffi/pLannotate/releases/download/v{plannotate_version.rsplit('.', 1)[0]}.0/BLAST_dbs.tar.gz"
-    # db_loc = "https://github.com/barricklab/pLannotate/releases/download/v1.1.0/BLAST_dbs.tar.gz"
-
-    # subprocess.call(["wget", "-P", f"{ROOT_DIR}/data/", db_loc])
-    subprocess.call(["curl", "-L", "-o", f"{ROOT_DIR}/data/BLAST_dbs.tar.gz", db_loc])
-
-    # check if download was successful
-    if not os.path.exists(f"{ROOT_DIR}/data/BLAST_dbs.tar.gz"):
-        print("Error downloading databases. Please try again or contact the developer.")
-        sys.exit()
-
-    print("Download complete.")
-    print()
-
-    print("Extracting...")
-    subprocess.call(
-        ["tar", "-xzf", f"{ROOT_DIR}/data/BLAST_dbs.tar.gz", "-C", f"{ROOT_DIR}/data/"]
-    )
-    print("Extraction complete.")
-    print()
-
-    print("Removing archive...")
-    subprocess.call(["rm", f"{ROOT_DIR}/data/BLAST_dbs.tar.gz"])
-    print("Removal complete.")
-    print()
-
-    print("Done.")
-    print()

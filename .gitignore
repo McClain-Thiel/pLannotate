@@ -8,7 +8,7 @@ data/addgene_features_20-9-3/
 
 # Mac
 .DS_Store
-
+.claude
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

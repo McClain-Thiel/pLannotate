@@ -1,144 +1,337 @@
+# pLannotate
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 ![Python 3](https://img.shields.io/badge/Language-Python_3-steelblue.svg)
 [![DOI](https://zenodo.org/badge/DOI/10.1093/nar/gkab374.svg)](https://doi.org/10.1093/nar/gkab374)
-[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/plannotate/README.html)
-
 
 <img width="400" alt="pLannotate_logo" src="plannotate/data/images/pLannotate.png">
 
-Online Annotation
-=================
+**Automated annotation of engineered plasmids**
 
-pLannotate is web server for automatically annotating engineered plasmids.
+pLannotate is a Python package for automatically annotating engineered plasmids using sequence similarity searches against curated databases. This is a streamlined, installable version of the original pLannotate tool, designed for programmatic use and integration into bioinformatics workflows.
 
-Please visit http://plannotate.barricklab.org/
+## Features
 
+- **Fast annotation**: Uses Diamond, BLAST, and Infernal for comprehensive sequence searches
+- **Multiple databases**: Search against protein (fpbase, swissprot), nucleotide (snapgene), and RNA (Rfam) databases
+- **Circular plasmid support**: Handles origin-crossing features in circular plasmids
+- **Flexible output**: Generate GenBank files, CSV reports, or work with pandas DataFrames
+- **Batch processing**: Annotate multiple plasmids programmatically
 
-Local Installation
-==================
-To use pLannotate as a local server or a command line tool, please follow the installation instructions below.
-### Quick install
+## Installation
 
-The easiest way to install is via [conda](https://docs.conda.io/en/latest/), or for faster installation, [mamba](https://github.com/mamba-org/mamba):
+### 1. Install pLannotate
 
 ```bash
-conda create -n plannotate -c conda-forge -c bioconda plannotate
+# Install from source
+git clone https://github.com/your-username/pLannotate.git
+cd pLannotate
+pip install -e .
+
+# Or install with uv (recommended)
+uv add .
 ```
-or
+
+### 2. Install External Tools
+
+pLannotate requires external bioinformatics tools for sequence searching:
+
+#### On macOS (using Homebrew)
+
 ```bash
-mamba create -n plannotate -c conda-forge -c bioconda plannotate
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install bioinformatics tools
+brew install diamond
+brew install blast
+brew install infernal
 ```
 
-Then activate the `plannotate` conda environment (`conda activate plannotate`) and proceed with using pLannotate (see **Using pLannotate locally** below).
+#### On Linux (using Conda/Mamba)
 
+```bash
+# Install conda/mamba if not already installed
+# Then install bioinformatics tools
+conda install -c bioconda diamond blast infernal
 
-### Installing from source
-Installing from source also requires conda (or mamba), therefore the above method is recommended. If you still wish to install from source, download the compressed source code from the [releases](https://github.com/barricklab/pLannotate/releases) page. Uncompress the source code and move the directory to a location of your choice.
-
-On the command line, navigate into the `pLannotate` folder.
-
-Enter the following commands:
-```
-conda env create -f environment.yml
-conda activate plannotate
-python setup.py install
+# Or with mamba (faster)
+mamba install -c bioconda diamond blast infernal
 ```
 
-After installation, run the following command to download the database files:
-```
-plannotate setupdb
-```
+#### On Linux (using package managers)
 
-Using pLannotate locally
-=====
-### Local server (GUI)
-
-After installation, launch pLannotate as a local web server with:
-```
-plannotate streamlit
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install diamond-aligner ncbi-blast+ infernal
 ```
 
-pLannotate should launch in your default web browser, or you may simply navigate to http://localhost:8501 in your web browser.
-
-### Command Line Interface (batch mode)
-
-To annotate FASTA or GenBank files and generate the interactive plasmid maps on the command line,
-follow the above instructions to install pLannotate.
-
-We can check the options using the following command:
-
-`plannotate batch --help`
-
-```
-Usage: plannotate batch [OPTIONS]
-
-  Annotates engineered DNA sequences, primarily plasmids. Accepts a FASTA file
-  and outputs a gbk file with annotations, as well as an optional interactive
-  plasmid map as an HTLM file.
-
-Options:
-  -i, --input TEXT      location of a FASTA or GBK file
-  -o, --output TEXT     location of output folder. DEFAULT: current dir
-  -f, --file_name TEXT  name of output file (do not add extension). DEFAULT:
-                        input file name
-
-  -s, --suffix TEXT     suffix appended to output files. Use '' for no suffix.
-                        DEFAULT: '_pLann'
-
-  -y, --yaml_file TEXT  path to YAML file for custom databases. DEFAULT:
-                        builtin
-
-  -l, --linear          enables linear DNA annotation
-  -h, --html            creates an html plasmid map in specified path
-  -c, --csv             creates a cvs file in specified path
-  -d, --detailed        uses modified algorithm for a more-detailed search
-                        with more false positives
-
-  -x, --no_gbk          supresses GenBank output file
-  --help                Show this message and exit.
-  ```
-
-Example usage:
-```
-plannotate batch -i ./plannotate/data/fastas/pUC19.fa --html --output ~/Desktop/ --file_name pLasmid
+**CentOS/RHEL/Fedora:**
+```bash
+# Install EPEL repository first
+sudo yum install epel-release
+sudo yum install diamond ncbi-blast+ infernal
 ```
 
-Custom databases can be added by supplying pLannotate a custom YAML file. To create the default YAML file, enter the following command:
+### 3. Verify Installation
+
+```bash
+# Check that tools are installed
+diamond version
+blastn -version
+cmscan -h
+
+# Test pLannotate import
+python -c "from plannotate.annotate import annotate; print('✓ pLannotate installed successfully')"
 ```
-plannotate yaml > plannotate_default.yaml
-```
 
-This configuration file can be edited to point to other external databases that you wish to use. When launching pLannotate, you can specify the path to your custom YAML file using the `--yaml_file` option. 
+## Quick Start
 
-### Using within Python
-
-You can also directly import pLannotate as a Python module:
+### Basic Usage
 
 ```python
 from plannotate.annotate import annotate
-from plannotate.bokeh_plot import get_bokeh
-from plannotate.resources import get_seq_record
-from bokeh.io import show
 
-# for inline plotting in jupyter
-from bokeh.resources import INLINE
-import bokeh.io
-bokeh.io.output_notebook(INLINE)
+# Annotate a plasmid sequence
+sequence = "ATGGTGAGCAAGGGCGAGGAGCTG..."  # Your plasmid sequence
+result = annotate(sequence, linear=False)  # False for circular plasmids
 
-seq = "tgaccaggcatcaaataaaacgaaaggctcagtcgaaagactgggcctttcgttttatctgttgtttgtcggtgaacgctctctactagagtcacactggctcaccttcgggtgggcctttctgcgtttataggtctcaatccacgggtacgggtatggagaaacagtagagagttgcgataaaaagcgtcaggtagtatccgctaatcttatggataaaaatgctatggcatagcaaagtgtgacgccgtgcaaataatcaatgtggacttttctgccgtgattatagacacttttgttacgcgtttttgtcatggctttggtcccgctttgttacagaatgcttttaataagcggggttaccggtttggttagcgagaagagccagtaaaagacgcagtgacggcaatgtctgatgcaatatggacaattggtttcttgtaatcgttaatccgcaaataacgtaaaaacccgcttcggcgggtttttttatggggggagtttagggaaagagcatttgtcatttgtttatttttctaaatacattcaaatatgtatccgctcatgagacaataaccctgataaatgcttcaataatattgaaaaaggaagagtatgagtattcaacatttccgtgtcgcccttattcccttttttgcgg"
-
-# get pandas df of annotations
-hits = annotate(seq, is_detailed = True, linear= True)
-
-# get biopython SeqRecord object
-seq_record = get_seq_record(hits, seq)
-
-# show plot
-show(get_bokeh(hits, linear=True))
+# View results
+print(f"Found {len(result)} annotations")
+print(result[['Feature', 'Type', 'qstart', 'qend', 'pident']].head())
 ```
 
-This syntax will likely change in the future to be more user-friendly.
+### Generate GenBank File
 
-About
-=====
-pLannotate was developed and is maintained by [Matt McGuffie](https://twitter.com/matt_mcguffie) at the [Barrick lab](https://barricklab.org/twiki/bin/view/Lab), University of Texas at Austin, Austin, Texas.
+```python
+from plannotate.annotate import annotate
+from plannotate.resources import get_gbk
+
+# Annotate sequence
+sequence = "ATGGTGAGCAAGGGCGAGGAGCTG..."
+annotations = annotate(sequence, linear=False)
+
+# Generate GenBank file
+gbk_content = get_gbk(annotations, sequence, is_linear=False)
+
+# Save to file
+with open("my_plasmid.gbk", "w") as f:
+    f.write(gbk_content)
+```
+
+### Working with Sample Plasmids
+
+```python
+from pathlib import Path
+from Bio import SeqIO
+from plannotate.annotate import annotate
+
+# Use included sample plasmids
+sample_dir = Path("plannotate/data/fastas")
+for fasta_file in sample_dir.glob("*.fa"):
+    # Load sequence
+    record = list(SeqIO.parse(fasta_file, "fasta"))[0]
+    sequence = str(record.seq)
+    
+    # Annotate
+    result = annotate(sequence, linear=False)
+    print(f"{fasta_file.name}: {len(result)} features found")
+```
+
+## Database Setup
+
+For full functionality, you need to set up sequence databases:
+
+### 1. Download/Create Databases
+
+**Protein Databases (Diamond format):**
+- **fpbase**: Fluorescent proteins database
+- **swissprot**: SwissProt protein database
+
+**Nucleotide Databases (BLAST format):**
+- **snapgene**: Common cloning features
+
+**RNA Databases (Infernal format):**
+- **Rfam**: RNA families database
+
+### 2. Example Database Setup
+
+```bash
+# Create database directory
+mkdir -p databases
+
+# Example: Create fpbase diamond database
+# (You need to obtain the fpbase protein sequences)
+diamond makedb --in fpbase.fasta --db databases/fpbase
+
+# Example: Create BLAST nucleotide database
+makeblastdb -in snapgene.fasta -dbtype nucl -out databases/snapgene
+
+# Example: Download and prepare Rfam (large download ~2GB)
+wget ftp://ftp.ebi.ac.uk/pub/databases/Rfam/CURRENT/Rfam.cm.gz
+gunzip Rfam.cm.gz
+mv Rfam.cm databases/
+```
+
+### 3. Update Database Configuration
+
+Edit `plannotate/data/data/databases.yml` to point to your database files:
+
+```yaml
+fpbase:
+  method: diamond
+  location: /path/to/your/databases/fpbase.dmnd
+  priority: 1
+  # ... other settings
+
+snapgene:
+  method: blastn
+  location: /path/to/your/databases/snapgene
+  priority: 1
+  # ... other settings
+```
+
+## Advanced Usage
+
+### Custom Database Configuration
+
+```python
+# Use custom database configuration
+custom_config = "my_databases.yml"
+result = annotate(sequence, yaml_file=custom_config, linear=False)
+```
+
+### Batch Processing
+
+```python
+import pandas as pd
+from plannotate.annotate import annotate
+
+sequences = {
+    "plasmid1": "ATGGTGAGCAAG...",
+    "plasmid2": "ATGGTGAGCAAG...",
+    # ... more sequences
+}
+
+results = []
+for name, seq in sequences.items():
+    annotations = annotate(seq, linear=False)
+    annotations['plasmid_name'] = name
+    results.append(annotations)
+
+# Combine all results
+all_annotations = pd.concat(results, ignore_index=True)
+all_annotations.to_csv("batch_annotations.csv", index=False)
+```
+
+### Filter Results
+
+```python
+# Get only CDS features with high identity
+cds_features = result[
+    (result['Type'] == 'CDS') & 
+    (result['pident'] > 90)
+]
+
+# Get features above a certain score threshold
+high_score_features = result[result['score'] > 100]
+```
+
+## API Reference
+
+### Core Functions
+
+#### `annotate(sequence, yaml_file=None, linear=False, is_detailed=False)`
+
+Annotate a DNA sequence.
+
+**Parameters:**
+- `sequence` (str): DNA sequence to annotate
+- `yaml_file` (str, optional): Path to database configuration file
+- `linear` (bool): True for linear DNA, False for circular plasmids
+- `is_detailed` (bool): Include detailed feature information
+
+**Returns:**
+- `pandas.DataFrame`: Annotation results
+
+#### `get_gbk(annotations_df, sequence, is_linear=False, record=None)`
+
+Generate GenBank format output.
+
+**Parameters:**
+- `annotations_df` (DataFrame): Annotation results from `annotate()`
+- `sequence` (str): Original DNA sequence
+- `is_linear` (bool): True for linear DNA, False for circular
+- `record` (SeqRecord, optional): Existing SeqRecord to annotate
+
+**Returns:**
+- `str`: GenBank formatted text
+
+### DataFrame Columns
+
+The annotation results DataFrame contains these key columns:
+
+- `Feature`: Feature name/description
+- `Type`: Feature type (CDS, misc_feature, etc.)
+- `qstart`, `qend`: Start and end positions (0-based)
+- `pident`: Percent identity
+- `length`: Feature length
+- `score`: Annotation confidence score
+- `fragment`: Boolean indicating if feature is truncated
+- `db`: Source database
+
+## Troubleshooting
+
+### Common Issues
+
+**"Tool not found in PATH"**
+```bash
+# Ensure tools are installed and accessible
+which diamond blastn cmscan
+
+# If using conda, activate the environment
+conda activate your_environment
+```
+
+**"No such file or directory" for databases**
+- Verify database paths in `databases.yml`
+- Ensure database files exist and have correct permissions
+- Check that Diamond databases have `.dmnd` extension
+
+**Empty results**
+- Sequence may not have matches in current databases
+- Try lowering identity thresholds in database parameters
+- Verify databases contain relevant sequences for your plasmids
+
+### Performance Tips
+
+- Use smaller, curated databases for faster searches
+- Adjust database parameters (identity thresholds, max targets)
+- For batch processing, consider parallel execution
+
+## Contributing
+
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a pull request
+
+## Citation
+
+If you use pLannotate in your research, please cite:
+
+> Barrick Lab. pLannotate: automated annotation of engineered plasmids. *Nucleic Acids Research* (2021).
+
+## License
+
+This project is licensed under the GPL v3 License - see the LICENSE file for details.
+
+## Links
+
+- Original pLannotate: https://github.com/mmcguffi/pLannotate
+- Web server: http://plannotate.barricklab.org/
+- Documentation: [Link to docs]
+- Issues: [Link to issues]

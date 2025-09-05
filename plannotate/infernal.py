@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 
 
@@ -10,7 +9,7 @@ def parse_infernal(file_loc):
     # find position of columns using "---" field
     # create list of len == 2 tuples
     col_widths = [len(ele) + 1 for ele in lines[1].split()]
-    ends = list(np.cumsum(col_widths))
+    ends = pd.Series(col_widths).cumsum()
     # changes longest data line in file
     # ends[-1] = max(map(len,[line for line in lines if line[0] != "#"]))
     ends[-1] += 100  # not super elegant -- just adds 100 to capture full output
