@@ -6,6 +6,28 @@ def parse_infernal(file_loc):
     with open(file_loc) as file_handle:
         lines = file_handle.readlines()
 
+    # Handle empty files or files with insufficient lines
+    if len(lines) < 2:
+        columns = [
+            "#idx",
+            "target name",
+            "accession", 
+            "clan name",
+            "seq from",
+            "seq to",
+            "mdl from",
+            "mdl to",
+            "strand",
+            "score",
+            "E-value",
+            "description of target",
+        ]
+        return pd.DataFrame(columns=[
+            "sseqid", "qstart", "qend", "sstart", "send", 
+            "sframe", "score", "evalue", "Feature", "Description",
+            "qseq", "length", "slen", "pident"
+        ])
+
     # find position of columns using "---" field
     # create list of len == 2 tuples
     col_widths = [len(ele) + 1 for ele in lines[1].split()]

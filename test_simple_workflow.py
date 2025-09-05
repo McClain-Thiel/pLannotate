@@ -62,16 +62,33 @@ def test_individual_tools():
         shutil.rmtree(temp_dir, ignore_errors=True)
     print()
     
-    # Test 2: BLASTN (online - quick test)
-    print("2. Testing BLASTN (online):")
+    # Test 2: BLASTN (local database)
+    print("2. Testing BLASTN (local database):")
     try:
-        # Very short sequence for quick online test
-        short_seq = "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGG"  # First 33 bp
-        db_config = {'method': 'blastn'}
+        # Create a simple test database
+        dna_fasta = os.path.join(temp_dir, "test_dna.fasta")
+        with open(dna_fasta, 'w') as f:
+            f.write(">test_seq\n")
+            f.write("ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTC\n")
         
-        print("   Querying NCBI (this may take 10-30 seconds)...")
-        result_df = BLAST(short_seq, db_config)
-        print(f"   ✓ BLASTN search completed: {len(result_df)} results")
+        # Create BLAST database
+        db_path = os.path.join(temp_dir, "test_dna")
+        result = subprocess.run([
+            "makeblastdb", "-in", dna_fasta, "-dbtype", "nucl", "-out", db_path
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            db_config = {
+                'method': 'blastn',
+                'db_loc': db_path,
+                'parameters': '-evalue 1 -max_target_seqs 10'
+            }
+            
+            test_seq = "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGG"
+            result_df = BLAST(test_seq, db_config)
+            print(f"   ✓ BLASTN search completed: {len(result_df)} results")
+        else:
+            print("   ✗ Could not create BLAST database")
         
     except Exception as e:
         print(f"   ✗ BLASTN test failed: {e}")
@@ -82,7 +99,7 @@ def test_individual_tools():
     import shutil
     tools = {
         'diamond': 'Protein sequence alignment',
-        'blastn': 'DNA sequence alignment (NCBI)',
+        'blastn': 'DNA sequence alignment (local databases)',
         'cmscan': 'RNA structure search (Infernal)'
     }
     
