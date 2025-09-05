@@ -3,10 +3,16 @@ import subprocess
 import sys
 from datetime import date
 from importlib.resources import files
+from pathlib import Path
 from tempfile import NamedTemporaryFile
+import hashlib
+import tarfile
+import urllib.request
+import shutil
 
 import pandas as pd
 import yaml
+from platformdirs import user_cache_dir
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
@@ -19,6 +25,101 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 valid_genbank_exts = [".gbk", ".gb", ".gbf", ".gbff"]
 valid_fasta_exts = [".fa", ".fasta", ".fas", ".fna"]
 MAX_PLAS_SIZE = 50000
+
+# Environment variable names for configuring database caching
+CACHE_ENV = "PLANNOTATE_DB_DIR"
+AUTO_ENV = "PLANNOTATE_AUTO_DOWNLOAD"
+SKIP_ENV = "PLANNOTATE_SKIP_DB_DOWNLOAD"
+
+DB_ARCHIVE = "BLAST_dbs.tar.gz"
+DB_CHECKSUM = (
+    "34c7bacb1c73bd75129e16990653f73b3eba7e3cdb3816a55d3989a7601f2137"
+)
+DB_URL_TEMPLATE = (
+    "https://github.com/mmcguffi/pLannotate/releases/download/"
+    "v{version}.0/BLAST_dbs.tar.gz"
+)
+
+
+def get_cache_root():
+    """Return the root directory for cached databases."""
+    return Path(os.environ.get(CACHE_ENV, user_cache_dir("pLannotate")))
+
+
+def set_db_cache_dir(path):
+    """Set a custom cache directory for databases."""
+    os.environ[CACHE_ENV] = str(path)
+
+
+def _confirm_download():
+    """Determine whether the user has agreed to a database download."""
+    if os.environ.get(SKIP_ENV):
+        return False
+    if os.environ.get(AUTO_ENV):
+        return True
+    if not sys.stdin.isatty():
+        return False
+    reply = input(
+        "pLannotate requires additional databases (~200MB). Download now? [y/N]: "
+    )
+    return reply.strip().lower() in {"y", "yes"}
+
+
+def download_db(cache_root=None, url=None, checksum=DB_CHECKSUM, force=False):
+    """Download and extract the pLannotate databases.
+
+    Parameters
+    ----------
+    cache_root: str or Path, optional
+        Directory in which to place the downloaded data. Defaults to the
+        user cache directory.
+    url: str, optional
+        URL from which to download the databases archive. Defaults to the
+        official release matching the installed pLannotate version.
+    checksum: str, optional
+        Expected SHA256 checksum of the archive. The download will be removed
+        and an exception raised if the checksum does not match.
+    force: bool, optional
+        If True, re-download even if the databases already exist.
+    """
+
+    cache_root = Path(cache_root) if cache_root else get_cache_root()
+    db_dir = cache_root / "BLAST_dbs"
+    if db_dir.exists() and not force:
+        return str(db_dir)
+
+    cache_root.mkdir(parents=True, exist_ok=True)
+    if not _confirm_download():
+        raise RuntimeError("Database download declined or skipped.")
+
+    url = url or DB_URL_TEMPLATE.format(version=plannotate_version.rsplit(".", 1)[0])
+    archive_path = cache_root / DB_ARCHIVE
+
+    with urllib.request.urlopen(url) as response, open(archive_path, "wb") as fh:
+        shutil.copyfileobj(response, fh)
+
+    if checksum:
+        digest = hashlib.sha256()
+        with open(archive_path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(8192), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != checksum:
+            archive_path.unlink(missing_ok=True)
+            raise ValueError("Checksum mismatch for downloaded databases.")
+
+    with tarfile.open(archive_path, "r:gz") as tar:
+        tar.extractall(cache_root)
+    archive_path.unlink(missing_ok=True)
+
+    return str(db_dir)
+
+
+def get_db_dir(download=True):
+    """Return the directory containing the databases, downloading if needed."""
+    db_dir = get_cache_root() / "BLAST_dbs"
+    if download and not os.environ.get(SKIP_ENV) and not db_dir.exists():
+        download_db()
+    return db_dir
 
 DF_COLS = [
     "sseqid",
@@ -298,16 +399,25 @@ def get_clean_csv_df(recordDf):
 #         print()
 
 
-def get_yaml(yaml_file_loc):
+def get_yaml(yaml_file_loc, db_dir=None):
+    """Load database configuration from YAML and resolve data locations."""
+
     with open(yaml_file_loc, "r") as f:
         dbs = yaml.load(f, Loader=yaml.SafeLoader)
+
+    cache_dir = Path(db_dir) if db_dir else get_db_dir()
 
     for db in dbs.keys():
         try:
             dbs[db]["parameters"] = " ".join(dbs[db]["parameters"])
         except KeyError:
             dbs[db]["parameters"] = ""
-        dbs[db]["db_loc"] = dbs[db]["location"]
+
+        location = dbs[db].get("location", "Default")
+        if location == "Default":
+            dbs[db]["db_loc"] = str(cache_dir / db)
+        else:
+            dbs[db]["db_loc"] = os.path.join(location, db)
 
     return dbs
 

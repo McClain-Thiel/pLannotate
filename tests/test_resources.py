@@ -1,8 +1,12 @@
 import pytest
 import os
 import pandas as pd
+import tarfile
+import hashlib
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest.mock import patch, mock_open
+from platformdirs import user_cache_dir
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio import SeqIO
@@ -347,6 +351,38 @@ class TestConstants:
         
         for col in required_cols:
             assert col in rsc.DF_COLS
+
+
+class TestDatabaseHandling:
+    """Tests for database caching utilities."""
+
+    def test_get_db_dir_default(self, monkeypatch):
+        monkeypatch.delenv("PLANNOTATE_DB_DIR", raising=False)
+        monkeypatch.delenv("PLANNOTATE_SKIP_DB_DOWNLOAD", raising=False)
+        expected = Path(user_cache_dir("pLannotate")) / "BLAST_dbs"
+        assert rsc.get_db_dir(download=False) == expected
+
+    def test_set_db_cache_dir(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("PLANNOTATE_SKIP_DB_DOWNLOAD", raising=False)
+        rsc.set_db_cache_dir(tmp_path)
+        assert rsc.get_db_dir(download=False) == tmp_path / "BLAST_dbs"
+
+    def test_download_db(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("PLANNOTATE_SKIP_DB_DOWNLOAD", raising=False)
+        monkeypatch.setenv("PLANNOTATE_AUTO_DOWNLOAD", "1")
+
+        build_dir = tmp_path / "build"
+        db_dir = build_dir / "BLAST_dbs"
+        db_dir.mkdir(parents=True)
+        (db_dir / "dummy.txt").write_text("hello")
+
+        archive_path = tmp_path / "db.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tar:
+            tar.add(db_dir, arcname="BLAST_dbs")
+        checksum = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+
+        result = rsc.download_db(cache_root=tmp_path, url=f"file://{archive_path}", checksum=checksum, force=True)
+        assert (Path(result) / "dummy.txt").exists()
 
 
 if __name__ == "__main__":
