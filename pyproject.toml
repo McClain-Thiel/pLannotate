@@ -3,25 +3,42 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pLannotate"
-version = "0.0.1"
+name = "plannotate"
+version = "1.2.3"
 authors = [
   { name="McClain Thiel", email="mcclain.thiel@gmail.com" },
 ]
-description = "A package for plasmid annotation"
+description = "Automated annotation of engineered plasmids using sequence similarity searches"
 readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "GPL-3.0-or-later" }
+keywords = ["bioinformatics", "plasmid", "annotation", "sequence-analysis", "molecular-biology"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
+    "Environment :: Console",
 ]
 dependencies = [
-    "biopython",
-    "pandas",
-    "reportlab",
-    "pyyaml",
+    "biopython>=1.70",
+    "pandas>=1.0.0",
+    "reportlab>=3.5.0",
+    "pyyaml>=5.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/McClain-Thiel/pLannotate"
+Repository = "https://github.com/McClain-Thiel/pLannotate"
+"Bug Tracker" = "https://github.com/McClain-Thiel/pLannotate/issues"
+Documentation = "https://github.com/McClain-Thiel/pLannotate#readme"
+"Original Project" = "https://github.com/mmcguffi/pLannotate"
 
 [project.optional-dependencies]
 dev = [

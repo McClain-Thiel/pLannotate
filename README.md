@@ -23,8 +23,11 @@ pLannotate is a Python package for automatically annotating engineered plasmids 
 ### 1. Install pLannotate
 
 ```bash
-# Install from source
-git clone https://github.com/your-username/pLannotate.git
+# Install from PyPI (when available)
+pip install plannotate
+
+# Or install from source
+git clone https://github.com/McClain-Thiel/pLannotate.git
 cd pLannotate
 pip install -e .
 
@@ -333,5 +336,5 @@ This project is licensed under the GPL v3 License - see the LICENSE file for det
 
 - Original pLannotate: https://github.com/mmcguffi/pLannotate
 - Web server: http://plannotate.barricklab.org/
-- Documentation: [Link to docs]
-- Issues: [Link to issues]
+- Documentation: https://github.com/McClain-Thiel/pLannotate#readme
+- Issues: https://github.com/McClain-Thiel/pLannotate/issues

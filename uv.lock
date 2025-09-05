@@ -643,7 +643,7 @@ wheels = [
 
 [[package]]
 name = "plannotate"
-version = "0.0.1"
+version = "1.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "biopython" },
@@ -668,13 +668,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "biopython" },
-    { name = "pandas" },
+    { name = "biopython", specifier = ">=1.70" },
+    { name = "pandas", specifier = ">=1.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-mock", marker = "extra == 'dev'" },
-    { name = "pyyaml" },
-    { name = "reportlab" },
+    { name = "pyyaml", specifier = ">=5.0.0" },
+    { name = "reportlab", specifier = ">=3.5.0" },
 ]
 provides-extras = ["dev"]
 
