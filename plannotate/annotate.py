@@ -1,10 +1,11 @@
 import shlex
 import subprocess
 from tempfile import NamedTemporaryFile
+import shutil
+import warnings
+import concurrent.futures
 
-import numpy as np
 import pandas as pd
-import streamlit as st
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -17,33 +18,21 @@ log = NamedTemporaryFile()
 
 def BLAST(seq, db):
     task = db["method"]
-    parameters = db["parameters"]
-    db_loc = db["db_loc"]
-    query = NamedTemporaryFile()
-    tmp = NamedTemporaryFile()
-    SeqIO.write(SeqRecord(Seq(seq), id="temp"), query.name, "fasta")
+    columns=['qstart', 'qend', 'sseqid', 'sframe', 'pident', 'slen', 'qseq', 'length', 'sstart', 'send', 'qlen', 'evalue']
 
     if task == "blastn":
-        flags = (
-            "qstart qend sseqid sframe pident slen qseq length sstart send qlen evalue"
-        )
-        cmd = (
-            f"blastn -task blastn-short -query {query.name} -out {tmp.name} "
-            f'-db {db_loc} {parameters} -outfmt "6 {flags}"'
-        )
+        if not shutil.which("blastn"):
+            warnings.warn("blastn not found in PATH, skipping blastn search. You can install it with 'conda install -c bioconda blast' or your system's package manager.")
+            return pd.DataFrame(columns=columns)
+        
+        query = NamedTemporaryFile(delete=False)
+        tmp = NamedTemporaryFile(delete=False)
+        SeqIO.write(SeqRecord(Seq(seq), id="temp"), query.name, "fasta")
 
-        _ = subprocess.run(
-            shlex.split(cmd),
-            shell=False,
-            capture_output=True,
-            text=True,
-        )
-
-    elif task == "diamond":
         flags = "qstart qend sseqid pident slen qseq length sstart send qlen evalue"
         cmd = (
-            f"diamond blastx -d {db_loc} -q {query.name} -o {tmp.name} "
-            f"{parameters} --outfmt 6 {flags}"
+            f"blastn -db {db['db_loc']} -query {query.name} -out {tmp.name} "
+            f"{db['parameters']} -outfmt '6 {flags}'"
         )
         _ = subprocess.run(
             shlex.split(cmd),
@@ -51,10 +40,78 @@ def BLAST(seq, db):
             capture_output=True,
             text=True,
         )
+        
+        with open(tmp.name, "r") as file_handle:
+            align = file_handle.readlines()
+
+        tmp.close()
+        query.close()
+        
+        if not align:
+            return pd.DataFrame(columns=columns)
+
+        inDf = pd.DataFrame([ele.split() for ele in align], columns=flags.split())
+        inDf = inDf.apply(pd.to_numeric, errors="ignore")
+
+        inDf["sframe"] = (inDf["qstart"] < inDf["qend"]).astype(int).replace(0, -1)
+        inDf["length"] = abs(inDf["qend"] - inDf["qstart"]) + 1
+
+        return inDf
+
+    elif task == "diamond":
+        if not shutil.which("diamond"):
+            warnings.warn("diamond not found in PATH, skipping diamond search. You can install it with 'conda install -c bioconda diamond' or your system's package manager.")
+            return pd.DataFrame(columns=columns)
+        
+        query = NamedTemporaryFile(delete=False)
+        tmp = NamedTemporaryFile(delete=False)
+        SeqIO.write(SeqRecord(Seq(seq), id="temp"), query.name, "fasta")
+
+        flags = "qstart qend sseqid pident slen qseq length sstart send qlen evalue"
+        cmd = (
+            f"diamond blastx -d {db['db_loc']} -q {query.name} -o {tmp.name} "
+            f"{db['parameters']} --outfmt 6 {flags}"
+        )
+        _ = subprocess.run(
+            shlex.split(cmd),
+            shell=False,
+            capture_output=True,
+            text=True,
+        )
+        
+        with open(tmp.name, "r") as file_handle:  # opens BLAST file
+            align = file_handle.readlines()
+
+        tmp.close()
+        query.close()
+        
+        if not align:
+            return pd.DataFrame(columns=columns)
+
+        inDf = pd.DataFrame([ele.split() for ele in align], columns=flags.split())
+        inDf = inDf.apply(pd.to_numeric, errors="ignore")
+
+        try:
+            inDf["sseqid"] = inDf["sseqid"].str.split("|", n=2, expand=True)[1]
+        except (ValueError, KeyError):
+            pass
+        inDf["sframe"] = (inDf["qstart"] < inDf["qend"]).astype(int).replace(0, -1)
+        inDf["slen"] = inDf["slen"] * 3
+        inDf["length"] = abs(inDf["qend"] - inDf["qstart"]) + 1
+
+        return inDf
 
     elif task == "infernal":
+        if not shutil.which("cmscan"):
+            warnings.warn("cmscan not found in PATH, skipping infernal search. You can install it with 'conda install -c bioconda infernal' or your system's package manager.")
+            return pd.DataFrame(columns=columns)
+        
+        query = NamedTemporaryFile(delete=False)
+        tmp = NamedTemporaryFile(delete=False)
+        SeqIO.write(SeqRecord(Seq(seq), id="temp"), query.name, "fasta")
+
         flags = "--cut_ga --rfam --noali --nohmmonly --fmt 2"
-        cmd = f"cmscan {flags} {parameters} --tblout {tmp.name} --clanin {db_loc} {query.name}"
+        cmd = f"cmscan {flags} {db['parameters']} --tblout {tmp.name} {db['db_loc']} {query.name}"
         _ = subprocess.run(
             shlex.split(cmd),
             shell=False,
@@ -76,25 +133,7 @@ def BLAST(seq, db):
 
         return inDf
 
-    with open(tmp.name, "r") as file_handle:  # opens BLAST file
-        align = file_handle.readlines()
-
-    tmp.close()
-    query.close()
-
-    inDf = pd.DataFrame([ele.split() for ele in align], columns=flags.split())
-    inDf = inDf.apply(pd.to_numeric, errors="ignore")
-
-    if task == "diamond":
-        try:
-            inDf["sseqid"] = inDf["sseqid"].str.split("|", n=2, expand=True)[1]
-        except (ValueError, KeyError):
-            pass
-        inDf["sframe"] = (inDf["qstart"] < inDf["qend"]).astype(int).replace(0, -1)
-        inDf["slen"] = inDf["slen"] * 3
-        inDf["length"] = abs(inDf["qend"] - inDf["qstart"]) + 1
-
-    return inDf
+    return pd.DataFrame(columns=columns)
 
 
 def calculate(inDf, is_linear):
@@ -138,19 +177,15 @@ def clean(inDf):
     # subtracts a full plasLen if longer than tot length
     inDf["qstart_dup"] = inDf["qstart"]
     inDf["qend_dup"] = inDf["qend"]
-    inDf["qstart"] = np.where(
-        inDf["qstart"] >= inDf["qlen"], inDf["qstart"] - inDf["qlen"], inDf["qstart"]
-    )
-    inDf["qend"] = np.where(
-        inDf["qend"] >= inDf["qlen"], inDf["qend"] - inDf["qlen"], inDf["qend"]
-    )
+    inDf["qstart"] = inDf["qstart"].where(
+        inDf["qstart"] < inDf["qlen"], inDf["qstart"] - inDf["qlen"])
+    inDf["qend"] = inDf["qend"].where(
+        inDf["qend"] < inDf["qlen"], inDf["qend"] - inDf["qlen"])
 
-    inDf["wstart"] = np.where(
-        inDf["wstart"] >= inDf["qlen"], inDf["wstart"] - inDf["qlen"], inDf["wstart"]
-    )
-    inDf["wend"] = np.where(
-        inDf["wend"] >= inDf["qlen"], inDf["wend"] - inDf["qlen"], inDf["wend"]
-    )
+    inDf["wstart"] = inDf["wstart"].where(
+        inDf["wstart"] < inDf["qlen"], inDf["wstart"] - inDf["qlen"])
+    inDf["wend"] = inDf["wend"].where(
+        inDf["wend"] < inDf["qlen"], inDf["wend"] - inDf["qlen"])
 
     # these are manually-curated (garbage) hits that overlap with common features
     problem_hits = ["P03851", "P03845", "ISS", "P03846"]
@@ -232,16 +267,22 @@ def clean(inDf):
 
 def get_details(inDf, yaml_file_loc):
     def parse_gz(sseqids, gz_loc):
+        if not shutil.which("rg"):
+            warnings.warn("ripgrep (rg) not found in PATH, skipping compressed database search. You can install it with 'conda install -c bioconda ripgrep' or your system's package manager.")
+            return pd.DataFrame(columns=["sseqid", "Feature", "Description"])
         # this is a bit fragile right now -- requires ['sseqid','Feature','Description'] order
         # as well as a default type
         # currently this is only implemented for the large SwissProt db
         # Could scrape first line to infer what is given that way
         hits = "|".join(sseqids)
         output = NamedTemporaryFile(suffix="csv")
-        subprocess.call(f'rg -z "{hits}" {gz_loc} > {output.name}', shell=True)
-        gz_details = pd.read_csv(
-            output.name, header=None, names=["sseqid", "Feature", "Description"]
-        )
+        subprocess.run(f'rg -z "{hits}" {gz_loc} > {output.name}', shell=True)
+        try:
+            gz_details = pd.read_csv(
+                output.name, header=None, names=["sseqid", "Feature", "Description"]
+            )
+        except pd.errors.EmptyDataError:
+            gz_details = pd.DataFrame(columns=["sseqid", "Feature", "Description"])
         output.close()
         return gz_details
 
@@ -321,83 +362,6 @@ def get_details(inDf, yaml_file_loc):
     return feat_desc
 
 
-def cache(*args, **kwargs):
-    def decorator(func):
-        try:
-            __IPYTHON__  # type: ignore
-            # We are in a Jupyter environment, so don't apply st.cache
-            return func
-        except NameError:
-            return st.cache(func, *args, **kwargs)
-
-    return decorator
-
-
-@cache(
-    hash_funcs={pd.DataFrame: lambda _: None},
-    suppress_st_warning=True,
-    max_entries=10,
-    show_spinner=False,
-)
-def get_raw_hits(query, linear, yaml_file_loc):
-    progressBar = st.progress(0)
-    progress_amt = 5
-    progressBar.progress(progress_amt)
-
-    databases = rsc.get_yaml(yaml_file_loc)
-    increment = int(90 / len(databases))
-
-    raw_hits = []
-    for database_name in databases:
-        database = databases[database_name]
-        hits = BLAST(seq=query, db=database)
-
-        hits["db"] = database_name
-        hits["sseqid"] = hits["sseqid"].astype(str)
-
-        if hits.empty:
-            continue
-
-        feat_descriptions = get_details(hits, yaml_file_loc)
-        # `suffixes = ('_x', None)` means the descriptions for Rfam will be copied,
-        # the original descriptions will be appeneded with `_x` and can be ignored
-        # the Rfam descriptions are in the original df due to the quirks of how the details
-        # are stored, so this is a work around. Possibly condsider dropping the `_x`` column
-        hits = hits.merge(
-            feat_descriptions, on="sseqid", how="left", suffixes=("_x", None)
-        )
-        hits = hits[hits.columns.drop(list(hits.filter(regex="_x")))]
-
-        # removes primer binding site annotations
-        hits = hits.loc[hits["Type"] != "primer_bind"]
-
-        hits["priority"] = database["priority"]
-        try:
-            hits["priority"] = hits["priority"] + hits["priority_mod"]
-            hits = hits.drop("priority_mod", axis=1)
-        except KeyError:
-            pass
-        hits = calculate(hits, is_linear=linear)
-
-        raw_hits.append(hits)
-
-        progress_amt += increment
-        progressBar.progress(progress_amt)
-
-    if len(raw_hits) == 0:
-        return pd.DataFrame()
-
-    blastDf = pd.concat(raw_hits)
-
-    blastDf = blastDf.sort_values(
-        by=["score", "length", "percmatch"], ascending=[False, False, False]
-    )
-
-    progressBar.empty()
-
-    return blastDf
-
-
 def annotate(inSeq, yaml_file=rsc.get_yaml_path(), linear=False, is_detailed=False):
     # This catches errors in sequence via Biopython
     fileloc = NamedTemporaryFile()
@@ -417,10 +381,56 @@ def annotate(inSeq, yaml_file=rsc.get_yaml_path(), linear=False, is_detailed=Fal
     elif linear is True:
         query = str(record.seq)
     else:
-        st.error("error")
+        raise ValueError("linear must be a boolean")
+
+    databases = rsc.get_yaml(yaml_file)
+
+    def process_database(database_tuple):
+        database_name, database = database_tuple
+        hits = BLAST(seq=query, db=database)
+
+        if hits.empty:
+            return None
+
+        hits["db"] = database_name
+        hits["sseqid"] = hits["sseqid"].astype(str)
+
+        feat_descriptions = get_details(hits, yaml_file)
+        # `suffixes = ('_x', None)` means the descriptions for Rfam will be copied,
+        # the original descriptions will be appeneded with `_x` and can be ignored
+        # the Rfam descriptions are in the original df due to the quirks of how the details
+        # are stored, so this is a work around. Possibly condsider dropping the `_x`` column
+        if not feat_descriptions.empty:
+            hits = hits.merge(
+                feat_descriptions, on="sseqid", how="left", suffixes=("_x", None)
+            )
+            hits = hits[hits.columns.drop(list(hits.filter(regex="_x")))]
+
+        # removes primer binding site annotations
+        hits = hits.loc[hits["Type"] != "primer_bind"]
+
+        hits["priority"] = database["priority"]
+        try:
+            hits["priority"] = hits["priority"] + hits["priority_mod"]
+            hits = hits.drop("priority_mod", axis=1)
+        except KeyError:
+            pass
+        hits = calculate(hits, is_linear=linear)
+        return hits
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = executor.map(process_database, databases.items())
+
+    raw_hits = [result for result in results if result is not None]
+
+    if len(raw_hits) == 0:
         return pd.DataFrame()
 
-    blastDf = get_raw_hits(query, linear, yaml_file)
+    blastDf = pd.concat(raw_hits)
+
+    blastDf = blastDf.sort_values(
+        by=["score", "length", "percmatch"], ascending=[False, False, False]
+    )
 
     if blastDf.empty:  # if no hits are found
         blastDf = pd.DataFrame(columns=rsc.DF_COLS)
@@ -452,7 +462,7 @@ def annotate(inSeq, yaml_file=rsc.get_yaml_path(), linear=False, is_detailed=Fal
             else:
                 return False
         else:
-            st.error("Fragment error.")
+            raise ValueError("Fragment error.")
 
     blastDf["fragment"] = blastDf.apply(is_fragment, axis=1)
 
