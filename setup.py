@@ -7,10 +7,10 @@ from setuptools.command.install import install
 import shutil
 import sys
 
-__pkg_name__ = 'plannotate'
-__author__ = 'Matt McGuffie'
-__author_email__ = 'mmcguffi@gmail.com'
-__description__ = 'Webserver and command line tool for annotating engineered plasmids'
+__pkg_name__ = 'plannotate-python'
+__author__ = 'McCain Thiel'
+__author_email__ = 'McCain.Thiel@gmail.com'
+__description__ = 'Small wrapper around pLannotate to parallelize the annotation process and run within python'
 
 # Use readme as long description and say its github-flavour markdown
 from os import path
