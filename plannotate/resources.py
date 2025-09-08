@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import ssl
 from datetime import date
 from importlib.resources import files
 from pathlib import Path
@@ -8,11 +9,13 @@ from tempfile import NamedTemporaryFile
 import hashlib
 import tarfile
 import urllib.request
+import urllib.error
 import shutil
 
 import pandas as pd
 import yaml
 from platformdirs import user_cache_dir
+from tqdm import tqdm
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
@@ -60,7 +63,7 @@ def _confirm_download():
     if not sys.stdin.isatty():
         return False
     reply = input(
-        "pLannotate requires additional databases (~200MB). Download now? [y/N]: "
+        "pLannotate requires additional databases (~900MB). Download now? [y/N]: "
     )
     return reply.strip().lower() in {"y", "yes"}
 
@@ -95,21 +98,68 @@ def download_db(cache_root=None, url=None, checksum=DB_CHECKSUM, force=False):
     url = url or DB_URL_TEMPLATE.format(version=plannotate_version.rsplit(".", 1)[0])
     archive_path = cache_root / DB_ARCHIVE
 
-    with urllib.request.urlopen(url) as response, open(archive_path, "wb") as fh:
-        shutil.copyfileobj(response, fh)
+    try:
+        print(f"Downloading databases from {url}")
+        
+        # Get file size for progress bar
+        with urllib.request.urlopen(url) as response:
+            total_size = int(response.headers.get('Content-Length', 0))
+        
+        # Download with progress bar
+        with urllib.request.urlopen(url) as response, open(archive_path, "wb") as fh:
+            if total_size > 0:
+                with tqdm(total=total_size, unit='B', unit_scale=True, desc="Downloading") as pbar:
+                    while True:
+                        chunk = response.read(8192)
+                        if not chunk:
+                            break
+                        fh.write(chunk)
+                        pbar.update(len(chunk))
+            else:
+                # Fallback without progress bar if size unknown
+                shutil.copyfileobj(response, fh)
+                
+    except urllib.error.URLError as e:
+        if "CERTIFICATE_VERIFY_FAILED" in str(e):
+            python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+            error_msg = (
+                f"SSL Certificate verification failed. This is a system configuration issue.\n"
+                f"To fix this, run the following command in your terminal:\n\n"
+                f"    open '/Applications/Python {python_version}/Install Certificates.command'\n\n"
+                f"Or try running:\n"
+                f"    /Applications/Python\\ {python_version}/Install\\ Certificates.command\n\n"
+                f"This will install the necessary SSL certificates for Python to download files.\n"
+                f"Original error: {e}"
+            )
+            raise RuntimeError(error_msg) from e
+        else:
+            raise RuntimeError(f"Failed to download databases: {e}") from e
+    except Exception as e:
+        raise RuntimeError(f"Unexpected error during download: {e}") from e
 
     if checksum:
+        print("Verifying download integrity...")
         digest = hashlib.sha256()
+        file_size = archive_path.stat().st_size
         with open(archive_path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(8192), b""):
-                digest.update(chunk)
+            with tqdm(total=file_size, unit='B', unit_scale=True, desc="Verifying") as pbar:
+                for chunk in iter(lambda: fh.read(8192), b""):
+                    digest.update(chunk)
+                    pbar.update(len(chunk))
         if digest.hexdigest() != checksum:
             archive_path.unlink(missing_ok=True)
             raise ValueError("Checksum mismatch for downloaded databases.")
+        print("✓ Download integrity verified")
 
+    print("Extracting databases...")
     with tarfile.open(archive_path, "r:gz") as tar:
-        tar.extractall(cache_root)
+        members = tar.getmembers()
+        with tqdm(total=len(members), desc="Extracting") as pbar:
+            for member in members:
+                tar.extract(member, cache_root)
+                pbar.update(1)
     archive_path.unlink(missing_ok=True)
+    print(f"✓ Databases successfully installed to: {db_dir}")
 
     return str(db_dir)
 
@@ -333,13 +383,13 @@ def get_seq_record(inDf, inSeq, is_linear=False, record=None):
                 inDf.loc[index]["feat loc"],
                 type=inDf.loc[index]["Type"],  # maybe change 'Type'
                 qualifiers={
-                    "note": "pLannotate",
-                    "label": inDf.loc[index]["Feature"],
-                    "database": inDf.loc[index]["db"],
-                    "identity": round(inDf.loc[index]["pident"], 1),
-                    "match_length": round(inDf.loc[index]["percmatch"], 1),
-                    "fragment": inDf.loc[index]["fragment"],
-                    "other": inDf.loc[index]["Type"],
+                    "note": ["pLannotate"],
+                    "label": [inDf.loc[index]["Feature"]],
+                    "database": [inDf.loc[index]["db"]],
+                    "identity": [str(round(inDf.loc[index]["pident"], 1))],
+                    "match_length": [str(round(inDf.loc[index]["percmatch"], 1))],
+                    "fragment": [str(inDf.loc[index]["fragment"])],
+                    "other": [inDf.loc[index]["Type"]],
                 },
             )
         )  # maybe change 'Type'

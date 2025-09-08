@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "plannotate-python"
-version = "1.2.3"
+version = "1.2.7"
 authors = [
   { name="McClain Thiel", email="mcclain.thiel@gmail.com" },
 ]
@@ -32,6 +32,7 @@ dependencies = [
     "reportlab>=3.5.0",
     "pyyaml>=5.0.0",
     "platformdirs>=3.0",
+    "tqdm>=4.0.0",
 ]
 
 [project.urls]
