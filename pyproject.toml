@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "plannotate-python"
-version = "1.2.7"
+version = "1.2.9"
 authors = [
   { name="McClain Thiel", email="mcclain.thiel@gmail.com" },
 ]

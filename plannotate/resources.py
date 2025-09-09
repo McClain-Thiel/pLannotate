@@ -40,7 +40,7 @@ DB_CHECKSUM = (
 )
 DB_URL_TEMPLATE = (
     "https://github.com/mmcguffi/pLannotate/releases/download/"
-    "v1.2.2/BLAST_dbs.tar.gz"
+    "v1.2.0/BLAST_dbs.tar.gz"
 )
 
 
