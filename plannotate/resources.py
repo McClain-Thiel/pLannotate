@@ -40,7 +40,7 @@ DB_CHECKSUM = (
 )
 DB_URL_TEMPLATE = (
     "https://github.com/mmcguffi/pLannotate/releases/download/"
-    "v{version}.0/BLAST_dbs.tar.gz"
+    "v1.2.2/BLAST_dbs.tar.gz"
 )
 
 
@@ -95,7 +95,7 @@ def download_db(cache_root=None, url=None, checksum=DB_CHECKSUM, force=False):
     if not _confirm_download():
         raise RuntimeError("Database download declined or skipped.")
 
-    url = url or DB_URL_TEMPLATE.format(version=plannotate_version.rsplit(".", 1)[0])
+    url = url or DB_URL_TEMPLATE
     archive_path = cache_root / DB_ARCHIVE
 
     try:
