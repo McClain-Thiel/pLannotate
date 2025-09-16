@@ -1,3 +1,5 @@
+import os
+import pickle
 import shlex
 import subprocess
 from tempfile import NamedTemporaryFile
@@ -265,7 +267,25 @@ def clean(inDf):
     return inDf
 
 
-def get_details(inDf, yaml_file_loc):
+def get_details(inDf, yaml_file_loc, database_config=None, database_name=None):
+    if inDf.empty:
+        return pd.DataFrame(columns=["sseqid", "Feature", "Description"])
+
+    if database_name is None:
+        assert len(set(inDf["db"].to_list())) == 1, (
+            "All hits must be from the same database",
+        )
+        database_name = inDf["db"].to_list()[0]
+    else:
+        unique_dbs = {db for db in inDf["db"].to_list() if db}
+        if unique_dbs and (len(unique_dbs) > 1 or database_name not in unique_dbs):
+            raise AssertionError("All hits must be from the same database")
+
+    if database_config is None:
+        databases = rsc.get_yaml(yaml_file_loc)
+        database = databases[database_name]
+    else:
+        database = database_config
     def parse_gz(sseqids, gz_loc):
         if not shutil.which("rg"):
             warnings.warn("ripgrep (rg) not found in PATH, skipping compressed database search. You can install it with 'conda install -c bioconda ripgrep' or your system's package manager.")
@@ -287,15 +307,6 @@ def get_details(inDf, yaml_file_loc):
         return gz_details
 
     # loop through databases
-    databases = rsc.get_yaml(yaml_file_loc)
-
-    assert len(set(inDf["db"].to_list())) == 1, (
-        "All hits must be from the same database"
-    )
-    database_name = inDf["db"].to_list()[0]
-
-    database = databases[database_name]
-
     sseqids = inDf.loc[inDf["db"] == database_name]["sseqid"].tolist()
     sseqids = [_ for _ in sseqids if _]  # removes blank edgecases
 
@@ -362,6 +373,54 @@ def get_details(inDf, yaml_file_loc):
     return feat_desc
 
 
+def _process_database(args):
+    database_name, database, query, linear, yaml_file = args
+
+    hits = BLAST(seq=query, db=database)
+
+    if hits.empty:
+        return None
+
+    hits["db"] = database_name
+    hits["sseqid"] = hits["sseqid"].astype(str)
+
+    feat_descriptions = get_details(
+        hits,
+        yaml_file,
+        database_config=database,
+        database_name=database_name,
+    )
+
+    if not feat_descriptions.empty:
+        hits = hits.merge(
+            feat_descriptions, on="sseqid", how="left", suffixes=("_x", None)
+        )
+        hits = hits[hits.columns.drop(list(hits.filter(regex="_x")))]
+
+    hits = hits.loc[hits["Type"] != "primer_bind"]
+
+    hits["priority"] = database["priority"]
+    try:
+        hits["priority"] = hits["priority"] + hits["priority_mod"]
+        hits = hits.drop("priority_mod", axis=1)
+    except KeyError:
+        pass
+
+    hits = calculate(hits, is_linear=linear)
+    return hits
+
+
+def _execute_parallel(tasks, executor_cls, max_workers):
+    with executor_cls(max_workers=max_workers) as executor:
+        futures = [executor.submit(_process_database, task) for task in tasks]
+        results = []
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if result is not None:
+                results.append(result)
+    return results
+
+
 def annotate(inSeq, yaml_file=rsc.get_yaml_path(), linear=False, is_detailed=False):
     # This catches errors in sequence via Biopython
     fileloc = NamedTemporaryFile()
@@ -384,44 +443,51 @@ def annotate(inSeq, yaml_file=rsc.get_yaml_path(), linear=False, is_detailed=Fal
         raise ValueError("linear must be a boolean")
 
     databases = rsc.get_yaml(yaml_file)
+    database_items = list(databases.items())
 
-    def process_database(database_tuple):
-        database_name, database = database_tuple
-        hits = BLAST(seq=query, db=database)
+    if not database_items:
+        return pd.DataFrame()
 
-        if hits.empty:
-            return None
+    tasks = [
+        (database_name, database, query, linear, yaml_file)
+        for database_name, database in database_items
+    ]
 
-        hits["db"] = database_name
-        hits["sseqid"] = hits["sseqid"].astype(str)
+    raw_hits = []
+    if len(tasks) == 1:
+        single_result = _process_database(tasks[0])
+        if single_result is not None:
+            raw_hits.append(single_result)
+    else:
+        cpu_count = os.cpu_count() or 1
+        max_workers = max(1, min(len(tasks), cpu_count))
 
-        feat_descriptions = get_details(hits, yaml_file)
-        # `suffixes = ('_x', None)` means the descriptions for Rfam will be copied,
-        # the original descriptions will be appeneded with `_x` and can be ignored
-        # the Rfam descriptions are in the original df due to the quirks of how the details
-        # are stored, so this is a work around. Possibly condsider dropping the `_x`` column
-        if not feat_descriptions.empty:
-            hits = hits.merge(
-                feat_descriptions, on="sseqid", how="left", suffixes=("_x", None)
+        results = []
+        process_failed = True
+        if max_workers > 1:
+            try:
+                results = _execute_parallel(
+                    tasks, concurrent.futures.ProcessPoolExecutor, max_workers
+                )
+                process_failed = False
+            except (
+                pickle.PicklingError,
+                AttributeError,
+                TypeError,
+                concurrent.futures.process.BrokenProcessPool,
+            ):
+                warnings.warn(
+                    "Process-based parallelism unavailable; falling back to threads.",
+                    RuntimeWarning,
+                )
+
+        if process_failed:
+            thread_workers = max(1, min(len(tasks), max_workers))
+            results = _execute_parallel(
+                tasks, concurrent.futures.ThreadPoolExecutor, thread_workers
             )
-            hits = hits[hits.columns.drop(list(hits.filter(regex="_x")))]
 
-        # removes primer binding site annotations
-        hits = hits.loc[hits["Type"] != "primer_bind"]
-
-        hits["priority"] = database["priority"]
-        try:
-            hits["priority"] = hits["priority"] + hits["priority_mod"]
-            hits = hits.drop("priority_mod", axis=1)
-        except KeyError:
-            pass
-        hits = calculate(hits, is_linear=linear)
-        return hits
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = executor.map(process_database, databases.items())
-
-    raw_hits = [result for result in results if result is not None]
+        raw_hits = results
 
     if len(raw_hits) == 0:
         return pd.DataFrame()
