@@ -51,7 +51,7 @@ def BLAST(seq, db):
             return pd.DataFrame(columns=columns)
 
         inDf = pd.DataFrame([ele.split() for ele in align], columns=flags.split())
-        inDf = inDf.apply(pd.to_numeric, errors="ignore")
+        inDf = inDf.apply(pd.to_numeric)
 
         inDf["sframe"] = (inDf["qstart"] < inDf["qend"]).astype(int).replace(0, -1)
         inDf["length"] = abs(inDf["qend"] - inDf["qstart"]) + 1
@@ -89,7 +89,7 @@ def BLAST(seq, db):
             return pd.DataFrame(columns=columns)
 
         inDf = pd.DataFrame([ele.split() for ele in align], columns=flags.split())
-        inDf = inDf.apply(pd.to_numeric, errors="ignore")
+        inDf = inDf.apply(pd.to_numeric)
 
         try:
             inDf["sseqid"] = inDf["sseqid"].str.split("|", n=2, expand=True)[1]
@@ -211,7 +211,7 @@ def clean(inDf):
 
     # for some reason some int columns are behaving as floats -- convert without downcasting
     # Avoid narrowing to int8/int16 which can overflow during arithmetic
-    inDf = inDf.apply(pd.to_numeric, errors="ignore")
+    inDf = inDf.apply(pd.to_numeric)
 
     for i in inDf.index:
         # end    = inDf['qlen'][0]
