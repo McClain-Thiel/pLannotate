@@ -209,8 +209,9 @@ def clean(inDf):
     seqSpace = []
     end = int(inDf["qlen"][0])
 
-    # for some reason some int columns are behaving as floats -- this converts them
-    inDf = inDf.apply(pd.to_numeric, errors="ignore", downcast="integer")
+    # for some reason some int columns are behaving as floats -- convert without downcasting
+    # Avoid narrowing to int8/int16 which can overflow during arithmetic
+    inDf = inDf.apply(pd.to_numeric, errors="ignore")
 
     for i in inDf.index:
         # end    = inDf['qlen'][0]

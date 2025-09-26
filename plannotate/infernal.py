@@ -86,16 +86,16 @@ def parse_infernal(file_loc):
         "Accession: " + infernal["accession"] + " - " + infernal["Description"]
     )
 
-    infernal = infernal.apply(pd.to_numeric, errors="ignore", downcast="integer")
+    # Convert numeric columns without downcasting to avoid accidental int8/int16 overflows
+    infernal = infernal.apply(pd.to_numeric, errors="ignore")
 
     infernal["qseq"] = ""
     to_swap = infernal["qend"] < infernal["qstart"]
     infernal.loc[to_swap, ["qstart", "qend"]] = infernal.loc[
         to_swap, ["qend", "qstart"]
     ].values
-    infernal[["qstart", "qend"]] = infernal[["qstart", "qend"]].apply(
-        pd.to_numeric, downcast="integer"
-    )
+    # Keep default integer widths for start/end positions
+    infernal[["qstart", "qend"]] = infernal[["qstart", "qend"]].apply(pd.to_numeric)
     infernal["sframe"] = infernal["sframe"].replace(["-", "+"], [-1, 1])
     infernal["qstart"] = infernal["qstart"] - 1
     infernal["qend"] = infernal["qend"] - 1
